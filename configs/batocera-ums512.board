@@ -1,0 +1,51 @@
+include batocera-board.common
+
+# Target definition (Unisoc UMS512 / T618: 2x Cortex-A75 + 6x Cortex-A55, Mali-G52)
+BR2_aarch64=y
+BR2_cortex_a75_a55=y
+BR2_ARM_FPU_NEON_FP_ARMV8=y
+BR2_PACKAGE_BATOCERA_TARGET_UMS512=y
+BR2_TARGET_OPTIMIZATION="-pipe -fsigned-char"
+# No UART is broken out on the RG Rotate: the only console is the USB g_serial gadget
+BR2_TARGET_GENERIC_GETTY_PORT="ttyGS0"
+BR2_TARGET_GENERIC_GETTY_BAUDRATE_115200=y
+BR2_GLOBAL_PATCH_DIR="$(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/patches $(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/unisoc/ums512/patches"
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/fsoverlay $(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/unisoc/ums512/fsoverlay"
+
+# Kernel: mainline 7.1 + Unisoc SPRD fork carrying the RG Rotate DTS and drivers
+# (display, audio/AGDSP, PMIC, USB OTG, wifi/bt)
+# 6.18 toolchain headers (not "as kernel"): gcc 14 libsanitizer needs <linux/scc.h>, which
+# newer kernel headers dropped; the 7.1 kernel itself is newer than the headers, which is fine
+BR2_KERNEL_HEADERS_6_18=y
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_GIT=y
+BR2_LINUX_KERNEL_CUSTOM_REPO_URL="https://github.com/beebono/linux-mainline-sprd.git"
+# TODO: pin to a commit of branch rg-rotate (please update when updating commit ref)
+BR2_LINUX_KERNEL_CUSTOM_REPO_VERSION="rg-rotate"
+BR2_LINUX_KERNEL_PATCH="$(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/unisoc/ums512/linux_patches"
+BR2_LINUX_KERNEL_USE_DEFCONFIG=y
+BR2_LINUX_KERNEL_DEFCONFIG="defconfig"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="$(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/linux-defconfig-fragment.config $(BR2_EXTERNAL_BATOCERA_PATH)/board/batocera/unisoc/ums512/linux_ums512-defconfig.config"
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="sprd/ums512-rg-rotate"
+
+# System
+BR2_PACKAGE_BATOCERA_KODI21=y
+BR2_TARGET_ROOTFS_SQUASHFS4_ZSTD=y
+
+# GPU (Mali-G52 / Bifrost)
+BR2_PACKAGE_BATOCERA_PANFROST_MESA3D=y
+BR2_PACKAGE_BATOCERA_WAYLAND_LABWC=y
+BR2_PACKAGE_BATOCERA_XWAYLAND=y
+
+# Filesystem tools
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_PACKAGE_HOST_MTOOLS=y
+
+# Bootloader: custom U-Boot loaded by the RG Rotate SPL (github.com/beebono/ums512_spl)
+BR2_PACKAGE_UBOOT_ANBERNIC_RG_ROTATE=y
+
+# Batocera Splash Support
+BR2_PACKAGE_BATOCERA_SPLASH_MPV=y

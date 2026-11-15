@@ -1,0 +1,7 @@
+images:
+  - name:   ums512
+    family: ums512
+    hardwares:
+      - name:   RG Rotate
+        vendor: Anbernic
+        type:   handheld

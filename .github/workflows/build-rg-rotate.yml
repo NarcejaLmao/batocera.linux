@@ -1,0 +1,141 @@
+name: Build Anbernic RG Rotate (ums512)
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_image:
+        description: 'Upload the built image as an artifact'
+        type: boolean
+        default: true
+  push:
+    paths:
+      - 'configs/batocera-ums512.board'
+      - 'board/batocera/unisoc/**'
+      - 'scripts/prune-to-rg-rotate.sh'
+      - 'package/batocera/boot/uboot-anbernic-rg-rotate/**'
+      - '.github/workflows/build-rg-rotate.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Normalize line endings and exec bits
+        run: |
+          grep -rIl --exclude-dir=.git $'\r' . | xargs -r sed -i 's/\r$//'
+          find . -path ./.git -prune -o -type f -size -2M -print0 \
+            | xargs -0 -r sh -c 'for f; do [ "$(head -c2 "$f")" = "#!" ] && chmod +x "$f"; done; true' _
+
+      - name: Restore flattened symlinks
+        run: |
+          n=0
+          while IFS= read -r -d '' f; do
+            grep -Iq . "$f" || continue
+            [ "$(wc -l < "$f")" -le 1 ] || continue
+            c=$(tr -d '\r\n' < "$f")
+            case "$c" in
+              ""|*[[:space:]]*|/*|*[=#\"\'{}\(\):,\;\|\$]*) continue ;;
+            esac
+            d=$(dirname "$f")
+            [ -e "$d/$c" ] && [ "$d/$c" != "$f" ] || continue
+            rm -f "$f" && ln -s "$c" "$f" && n=$((n+1))
+          done < <(find . -path ./.git -prune -o -type f -size -300c -print0)
+          echo "restored $n symlinks"
+
+      - name: Restore skeleton symlinks
+        run: |
+          n=0
+          while IFS= read -r -d '' f; do
+            [ -s "$f" ] || continue
+            [ "$(wc -l < "$f")" -eq 0 ] || continue
+            c=$(tr -d '\r' < "$f")
+            case "$c" in
+              ""|*[[:space:]]*|*[=#\"\'{}\(\):,\;\|\$]*) continue ;;
+              /*|../*|./*) ;;
+              *) continue ;;
+            esac
+            rm -f "$f" && ln -s "$c" "$f" && n=$((n+1))
+          done < <(find buildroot/system/skeleton buildroot/package/skeleton-init-*/skeleton \
+                     -type f -size -300c -print0)
+
+      - name: Remove every device except the RG Rotate
+        run: bash scripts/prune-to-rg-rotate.sh
+
+      - name: Cache downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: dl-ums512-${{ hashFiles('configs/batocera-ums512.board', 'package/batocera/boot/uboot-anbernic-rg-rotate/*.mk') }}
+          restore-keys: dl-ums512-
+
+      - name: Cache ccache
+        uses: actions/cache@v4
+        with:
+          path: buildroot-ccache
+          key: ccache-ums512-${{ github.sha }}
+          restore-keys: ccache-ums512-
+
+      - name: Install U-Boot DHTB template
+        env:
+          TEMPLATE_B64: ${{ secrets.RG_ROTATE_UBOOT_TEMPLATE_B64 }}
+        run: |
+          if [ -n "$TEMPLATE_B64" ]; then
+            T=board/batocera/unisoc/ums512/uboot_template.img
+            echo "$TEMPLATE_B64" | base64 -d > "$T"
+            if [ "$(head -c2 "$T" | od -An -tx1 | tr -d ' ')" = "1f8b" ]; then
+              mv "$T" "$T.gz" && gunzip "$T.gz"
+            fi
+          else
+            echo "::warning::RG_ROTATE_UBOOT_TEMPLATE_B64 secret not set; uboot partition will be empty"
+          fi
+
+      - name: Build ums512
+        run: |
+          set -o pipefail
+          make ums512-build BATCH_MODE=1 2>&1 | tee build-console.log
+
+      - name: Collect images
+        run: |
+          mkdir -p artifacts
+          cp -v output/ums512/images/batocera/images/ums512/*.img* artifacts/ 2>/dev/null || true
+          ls -lh artifacts
+          find output/ums512/images -maxdepth 4 \( -name '*.img*' -o -name 'u-boot-dtb.bin' -o -name '*.dtb' \) -exec ls -lh {} \;
+
+      - name: Upload image
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_image }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: batocera-ums512-rg-rotate
+          path: artifacts/
+          if-no-files-found: warn
+          compression-level: 0
+
+      - name: Disk usage on failure
+        if: failure()
+        run: |
+          df -h /
+          tail -n 300 build-console.log > build-console-tail.log || true
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ums512-build-logs
+          path: |
+            output/ums512/build/build-time.log
+            build-console-tail.log
+          if-no-files-found: ignore

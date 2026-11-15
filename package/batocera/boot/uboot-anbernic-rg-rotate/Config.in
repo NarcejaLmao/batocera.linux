@@ -1,0 +1,7 @@
+config BR2_PACKAGE_UBOOT_ANBERNIC_RG_ROTATE
+    bool "uboot-anbernic-rg-rotate"
+    help
+      U-Boot for the Anbernic RG Rotate (Unisoc UMS512), loaded by
+      the RG Rotate SPL from the raw "uboot" GPT partition.
+
+      https://github.com/beebono/u-boot-ums512
