@@ -8,12 +8,6 @@ on:
         type: boolean
         default: true
   push:
-    paths:
-      - 'configs/batocera-ums512.board'
-      - 'board/batocera/unisoc/**'
-      - 'scripts/prune-to-rg-rotate.sh'
-      - 'package/batocera/boot/uboot-anbernic-rg-rotate/**'
-      - '.github/workflows/build-rg-rotate.yml'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
