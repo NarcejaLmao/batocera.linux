@@ -215,8 +215,8 @@ wine_options() {
     # Handle Wayland driver option only if the system is running Wayland
     if [[ "${SYSTEM_DISPLAY_MODE}" == "wayland" ]]; then
         if [[ "${WAYLAND_DRIVER}" != "native" ]]; then
+            # XWayland takes its keymap from the compositor, which already follows system.kblayout
             echo "*** System is Wayland, using XWayland by default or as requested. ***"
-            setxkbmap "${KEYBOARD}"
         else
             CMD_PREFIX="DISPLAY="
             echo "*** System is Wayland and 'native' driver requested. Forcing Wine native Wayland mode. ***"
@@ -258,8 +258,8 @@ wine_options() {
         fi
     fi
 
-    export DXVK_FRAME_RATE=0
-    [[ "${FPS_LIMIT}" = 1 ]] && DXVK_FRAME_RATE=60
+    # DXVK no longer reads DXVK_FRAME_RATE, the limit goes through its inline config
+    [[ "${FPS_LIMIT}" = 1 ]] && export DXVK_CONFIG="dxgi.maxFrameRate = 60; d3d9.maxFrameRate = 60"
 
     export WINEDEBUG="-all"
     [[ "${WINE_DEBUG}" = 1 ]] && WINEDEBUG="err+all,fixme+all"
@@ -286,6 +286,11 @@ wine_options() {
 
     # Wine-mono override for FNA games
     export WINE_MONO_OVERRIDES="Microsoft.Xna.Framework.*,Gac=n"
+
+    # .NET 5+ aborts on the icu stubs of runners without their own icu (only ge-proton has one), Wine's NLS works
+    if ! find_runner_dll_dir icu x86_64-windows >/dev/null; then
+        export DOTNET_SYSTEM_GLOBALIZATION_USENLS=1
+    fi
 
     # Disable XIM support until libx11 >= 1.7 is widespread
     export WINE_ALLOW_XIM=0
